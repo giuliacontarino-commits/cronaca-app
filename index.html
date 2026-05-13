@@ -1,0 +1,145 @@
+// =============================================================
+// API: /api/news
+// =============================================================
+// Questo file gira sul server di Vercel (non sul tuo telefono).
+// Quando l'app chiama /api/news, questo codice:
+//   1. Scarica i feed RSS pubblici delle testate
+//   2. Filtra solo le notizie di cronaca
+//   3. Le rimette in ordine dalla più recente
+//   4. Le restituisce al sito
+// =============================================================
+
+// Elenco dei feed RSS che andremo a leggere.
+// Sono tutti pubblici e gratuiti, messi a disposizione dalle testate stesse.
+// Per aggiungere o togliere fonti basta modificare questa lista.
+const FEEDS = [
+  // --- Italia ---
+  { name: 'ANSA',       area: 'italia', url: 'https://www.ansa.it/sito/notizie/cronaca/cronaca_rss.xml' },
+  { name: 'Repubblica', area: 'italia', url: 'https://www.repubblica.it/rss/cronaca/rss2.0.xml' },
+  { name: 'Corriere',   area: 'italia', url: 'https://xml2.corriereobjects.it/rss/cronache.xml' },
+  { name: 'La Stampa',  area: 'italia', url: 'https://www.lastampa.it/rss/cronaca.rss' },
+
+  // --- Estero (sezione "Mondo" delle stesse testate, filtrate per cronaca) ---
+  { name: 'ANSA',       area: 'estero', url: 'https://www.ansa.it/sito/notizie/mondo/mondo_rss.xml' },
+  { name: 'Repubblica', area: 'estero', url: 'https://www.repubblica.it/rss/esteri/rss2.0.xml' },
+  { name: 'Corriere',   area: 'estero', url: 'https://xml2.corriereobjects.it/rss/esteri.xml' },
+];
+
+// Parole chiave per riconoscere se una notizia "Mondo" è di cronaca nera.
+// Se il titolo contiene una di queste, la teniamo. Altrimenti la scartiamo.
+// Puoi aggiungerne/toglierne quante vuoi.
+const KEYWORDS_CRONACA = [
+  'omicidio', 'omicidi', 'femminicidio', 'uccis', 'morto', 'morta',
+  'rapina', 'rapine', 'sparator', 'attentat', 'strage', 'massacro',
+  'arrest', 'fermato', 'fermata', 'aggressione', 'aggredito',
+  'sequestr', 'rapimento', 'rapito', 'droga', 'cocain', 'narco',
+  'mafia', 'camorr', 'ndranghet', 'processo', 'condannato', 'condannata',
+  'violenza', 'violentat', 'abuso', 'maltrattamenti',
+  'incendio', 'esplosione', 'incidente mortale',
+  'polizia', 'carabinieri', 'guardia di finanza', 'inchiesta', 'indagini'
+];
+
+// ===== Mini parser RSS =====
+// Estrae <item>...</item> da un feed XML senza librerie esterne.
+function parseRSS(xml, sourceName, area) {
+  const items = [];
+  const itemMatches = xml.match(/<item[\s\S]*?<\/item>/g) || [];
+
+  for (const itemXml of itemMatches) {
+    const get = (tag) => {
+      const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i');
+      const m = itemXml.match(re);
+      if (!m) return '';
+      let val = m[1].trim();
+      // Rimuovi CDATA
+      val = val.replace(/^<!\[CDATA\[([\s\S]*?)\]\]>$/, '$1');
+      // Rimuovi tag HTML residui
+      val = val.replace(/<[^>]+>/g, '');
+      // Decodifica entità HTML basilari
+      val = val.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+               .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, ' ');
+      return val.trim();
+    };
+
+    const title = get('title');
+    const link = get('link');
+    const pubDate = get('pubDate') || get('dc:date');
+    const description = get('description');
+
+    if (!title || !link) continue;
+
+    items.push({
+      title,
+      link,
+      summary: description.length > 220 ? description.slice(0, 220) + '…' : description,
+      pubDate: pubDate ? new Date(pubDate).toISOString() : new Date().toISOString(),
+      source: sourceName,
+      area
+    });
+  }
+
+  return items;
+}
+
+// Decide se una notizia "Mondo" è di cronaca, in base alle parole chiave.
+function isCronaca(item) {
+  const text = (item.title + ' ' + item.summary).toLowerCase();
+  return KEYWORDS_CRONACA.some(kw => text.includes(kw));
+}
+
+// ===== Handler principale =====
+export default async function handler(req, res) {
+  try {
+    // Scarica tutti i feed in parallelo (più veloce)
+    const results = await Promise.allSettled(
+      FEEDS.map(async (feed) => {
+        const response = await fetch(feed.url, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (CronacaApp)' }
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const xml = await response.text();
+        return parseRSS(xml, feed.name, feed.area);
+      })
+    );
+
+    // Unisci i risultati riusciti
+    let allItems = [];
+    results.forEach((result, i) => {
+      if (result.status === 'fulfilled') {
+        allItems = allItems.concat(result.value);
+      } else {
+        console.error(`Errore feed ${FEEDS[i].name}/${FEEDS[i].area}:`, result.reason?.message);
+      }
+    });
+
+    // Filtra: le notizie "estero" devono contenere parole chiave di cronaca.
+    // Le notizie "italia" arrivano già dalla sezione cronaca, le teniamo tutte.
+    allItems = allItems.filter(item => item.area === 'italia' || isCronaca(item));
+
+    // Rimuovi duplicati (stesso link)
+    const seen = new Set();
+    allItems = allItems.filter(item => {
+      if (seen.has(item.link)) return false;
+      seen.add(item.link);
+      return true;
+    });
+
+    // Ordina dal più recente al più vecchio
+    allItems.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
+
+    // Limita a 80 notizie (più che sufficienti)
+    allItems = allItems.slice(0, 80);
+
+    // Imposta cache di 5 minuti per non sovraccaricare i server delle testate
+    res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600');
+    res.status(200).json({
+      news: allItems,
+      generatedAt: new Date().toISOString(),
+      sources: FEEDS.length
+    });
+
+  } catch (err) {
+    console.error('Errore generale:', err);
+    res.status(500).json({ error: 'Errore nel recupero delle notizie', message: err.message });
+  }
+}

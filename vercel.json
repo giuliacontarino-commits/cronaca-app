@@ -1,0 +1,48 @@
+# Come pubblicare il tuo sito online (in 10 minuti)
+
+Niente paura: non devi programmare nulla. Sono solo click e copia/incolla.
+
+## Cosa ti serve
+- Un account Google (ce l'hai già)
+- Una connessione internet
+- 10 minuti
+
+## I 4 passi
+
+### 1) Crea un account su Vercel (gratis)
+1. Vai su **https://vercel.com/signup**
+2. Clicca su **"Continue with GitHub"** (se non hai GitHub, clicca "Continue with Email" e usa la tua mail)
+3. Se hai cliccato GitHub: ti verrà chiesto di creare anche un account GitHub. Usa la tua mail Google, è gratis.
+
+> Perché GitHub? È il posto dove vivrà il codice del tuo sito. Vercel lo legge da lì per pubblicarlo. Non devi imparare a usarlo, basta un account.
+
+### 2) Carica i file del sito su GitHub
+1. Vai su **https://github.com/new**
+2. Nel campo "Repository name" scrivi: `cronaca-app`
+3. Lascia tutto il resto com'è e clicca **"Create repository"**
+4. Nella pagina che si apre, clicca su **"uploading an existing file"** (è un link blu in mezzo alla pagina)
+5. Trascina dentro **TUTTI i file** che ti ho preparato (la cartella `cronaca-app` intera, con dentro `index.html`, `vercel.json`, e la cartella `api/`)
+6. Scorri in fondo e clicca il pulsante verde **"Commit changes"**
+
+### 3) Collega Vercel al tuo repository
+1. Torna su **https://vercel.com**
+2. Clicca su **"Add New..."** in alto a destra, poi **"Project"**
+3. Vedrai una lista: trova `cronaca-app` e clicca **"Import"**
+4. Lascia tutto com'è e clicca **"Deploy"**
+5. Aspetta circa 1 minuto. Vedrai dei coriandoli quando è pronto. 🎉
+
+### 4) Apri il tuo sito
+Vercel ti darà un link tipo `cronaca-app-tuonome.vercel.app`. Cliccaci sopra e il sito è online!
+
+Puoi aprirlo anche dal telefono, condividerlo con altri, salvarlo nella schermata Home come un'app.
+
+---
+
+## Come funziona dopo
+
+- **Le notizie si aggiornano da sole** ogni 5 minuti
+- **Non paghi nulla** finché il sito ha poco traffico (decine di migliaia di visite/mese sono gratis)
+- **Se vuoi cambiare qualcosa** (aggiungere fonti, cambiare colori, ecc.): scrivimi e ti preparo i file aggiornati. Tu li ricarichi su GitHub e Vercel pubblica la nuova versione in automatico in 1 minuto.
+
+## Se qualcosa va storto
+Scrivimi qui in chat dicendomi al punto a cui ti sei bloccata e cosa vedi sullo schermo (anche solo un messaggio tipo "al punto 3 non trovo il pulsante Import"). Ti aiuto subito.
