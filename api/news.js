@@ -2,12 +2,29 @@
 // Recupera feed RSS di testate italiane e li restituisce nel formato atteso dal frontend.
 
 const FEEDS = [
+  // === ITALIA / CRONACA ===
   { source: 'ANSA',              area: 'italia', url: 'https://www.ansa.it/sito/notizie/cronaca/cronaca_rss.xml' },
   { source: 'Repubblica',        area: 'italia', url: 'https://www.repubblica.it/rss/cronaca/rss2.0.xml' },
   { source: 'Corriere',          area: 'italia', url: 'https://xml2.corriereobjects.it/rss/cronache.xml' },
   { source: 'Il Sole 24 Ore',    area: 'italia', url: 'https://www.ilsole24ore.com/rss/italia.xml' },
+  { source: 'La Stampa',         area: 'italia', url: 'https://www.lastampa.it/rss/cronaca.rss' },
+  { source: 'Il Fatto Quotidiano',area: 'italia',url: 'https://www.ilfattoquotidiano.it/cronaca/feed/' },
+  { source: 'Il Messaggero',     area: 'italia', url: 'https://www.ilmessaggero.it/rss/cronaca.xml' },
+  { source: 'Il Giornale',       area: 'italia', url: 'https://www.ilgiornale.it/feed/sezione/cronache.xml' },
+  { source: 'TGCom24',           area: 'italia', url: 'https://www.tgcom24.mediaset.it/rss/cronaca.xml' },
+  { source: 'Sky TG24',          area: 'italia', url: 'https://tg24.sky.it/rss/cronaca.xml' },
+  { source: 'Rai News',          area: 'italia', url: 'https://www.rainews.it/rss/cronaca' },
+  { source: 'Adnkronos',         area: 'italia', url: 'https://www.adnkronos.com/RSS_Cronaca.xml' },
+
+  // === ESTERO ===
   { source: 'ANSA',              area: 'estero', url: 'https://www.ansa.it/sito/notizie/mondo/mondo_rss.xml' },
   { source: 'Repubblica',        area: 'estero', url: 'https://www.repubblica.it/rss/esteri/rss2.0.xml' },
+  { source: 'Corriere',          area: 'estero', url: 'https://xml2.corriereobjects.it/rss/esteri.xml' },
+  { source: 'La Stampa',         area: 'estero', url: 'https://www.lastampa.it/rss/esteri.rss' },
+  { source: 'Il Sole 24 Ore',    area: 'estero', url: 'https://www.ilsole24ore.com/rss/mondo.xml' },
+  { source: 'Sky TG24',          area: 'estero', url: 'https://tg24.sky.it/rss/mondo.xml' },
+  { source: 'Rai News',          area: 'estero', url: 'https://www.rainews.it/rss/mondo' },
+  { source: 'Adnkronos',         area: 'estero', url: 'https://www.adnkronos.com/RSS_Esteri.xml' },
 ];
 
 // Parole chiave per identificare notizie relative al caso Garlasco
@@ -53,7 +70,18 @@ function isGarlascoNews(item) {
   return GARLASCO_KEYWORDS.some(kw => haystack.includes(kw));
 }
 
-// Fetch con timeout: se un feed è troppo lento, viene abbandonato
+// Deduplica notizie identiche provenienti da fonti diverse (basandosi sul titolo normalizzato)
+function dedupe(items) {
+  const seen = new Map();
+  for (const item of items) {
+    const key = item.title.toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 80);
+    if (!seen.has(key)) {
+      seen.set(key, item);
+    }
+  }
+  return Array.from(seen.values());
+}
+
 async function fetchFeed(feed) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -80,9 +108,8 @@ async function fetchFeed(feed) {
 
 export default async function handler(req, res) {
   try {
-    // Promise.allSettled: anche se alcuni feed falliscono, continuiamo con gli altri
     const settled = await Promise.allSettled(FEEDS.map(fetchFeed));
-    const allNews = settled
+    let allNews = settled
       .filter(r => r.status === 'fulfilled')
       .flatMap(r => r.value);
 
@@ -92,18 +119,20 @@ export default async function handler(req, res) {
       return;
     }
 
+    // Deduplica notizie identiche da fonti diverse
+    allNews = dedupe(allNews);
+
     // Ordina dal più recente al più vecchio
     allNews.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
 
-    // Estrai notizie sul caso Garlasco
+    // Estrai notizie sul caso Garlasco (su tutte le notizie, anche oltre il top 80)
     const garlascoNews = allNews
       .filter(isGarlascoNews)
       .map(item => ({ ...item, area: 'garlasco' }));
 
-    // Notizie generali: top 60
-    const generalNews = allNews.slice(0, 60);
+    // Notizie generali: top 80 (più fonti → alzo il limite)
+    const generalNews = allNews.slice(0, 80);
 
-    // Unisci
     const news = [...generalNews, ...garlascoNews];
 
     res.setHeader('Cache-Control', 's-maxage=600, stale-while-revalidate=1200');
